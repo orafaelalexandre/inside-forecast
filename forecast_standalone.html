@@ -1,0 +1,825 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Inside — Forecast</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,sans-serif;font-size:14px;background:#f5f5f3;color:#1a1a18;min-height:100vh}
+.app{max-width:1280px;margin:0 auto;padding:1.5rem 1rem}
+.header{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem;flex-wrap:wrap;gap:12px}
+.header h1{font-size:18px;font-weight:500}
+.header-right{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.badge-sync{font-size:11px;padding:3px 10px;border-radius:8px;background:rgba(0,0,0,.06);color:#666;border:0.5px solid rgba(0,0,0,.15)}
+.btn-refresh{font-size:12px;padding:6px 14px;border:0.5px solid rgba(0,0,0,.3);border-radius:8px;background:#1a1a18;color:#fff;cursor:pointer;display:flex;align-items:center;gap:6px}
+.btn-refresh:hover{opacity:.85}
+.btn-refresh:disabled{opacity:.5;cursor:not-allowed}
+.spinner{width:12px;height:12px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;display:none}
+.spinner.active{display:block}
+@keyframes spin{to{transform:rotate(360deg)}}
+.token-bar{background:#fff;border:0.5px solid rgba(0,0,0,.15);border-radius:10px;padding:10px 14px;margin-bottom:1.25rem;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.token-bar label{font-size:12px;color:#666;white-space:nowrap}
+.token-bar input{flex:1;min-width:200px;font-size:12px;padding:5px 10px;border:0.5px solid rgba(0,0,0,.25);border-radius:7px;background:transparent;color:#1a1a18;font-family:monospace}
+.token-bar .save-btn{font-size:12px;padding:5px 12px;border:0.5px solid rgba(0,0,0,.3);border-radius:7px;background:transparent;cursor:pointer;white-space:nowrap}
+.token-bar .save-btn:hover{background:rgba(0,0,0,.05)}
+.tabs{display:flex;gap:4px;border-bottom:0.5px solid rgba(0,0,0,.15);margin-bottom:1.5rem}
+.tab{font-size:13px;padding:7px 16px;cursor:pointer;color:#666;border-bottom:2px solid transparent;margin-bottom:-1px;background:none;border-top:none;border-left:none;border-right:none}
+.tab.active{color:#1a1a18;font-weight:500;border-bottom-color:#1a1a18}
+.metrics-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:1.5rem}
+.metric{background:rgba(0,0,0,.05);border-radius:8px;padding:12px 14px}
+.metric-label{font-size:11px;color:#666;margin-bottom:4px}
+.metric-value{font-size:22px;font-weight:500}
+.metric-sub{font-size:11px;color:#999;margin-top:2px}
+.section-title{font-size:11px;font-weight:500;color:#666;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px}
+.filters{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:1rem;align-items:center}
+.filter-btn{font-size:12px;padding:5px 12px;border:0.5px solid rgba(0,0,0,.3);border-radius:8px;background:transparent;color:#666;cursor:pointer}
+.filter-btn.active{background:#fff;color:#1a1a18;border-color:rgba(0,0,0,.4);font-weight:500}
+.chart-wrap{background:#fff;border:0.5px solid rgba(0,0,0,.15);border-radius:12px;padding:16px;margin-bottom:1.5rem}
+.chart-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px}
+.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:11px;color:#666}
+.legend-item{display:flex;align-items:center;gap:4px}
+.legend-sq{width:10px;height:10px;border-radius:2px}
+.chart-canvas-wrap{position:relative;width:100%;height:260px}
+.vel-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-bottom:1rem}
+.vel-card{background:#fff;border:0.5px solid rgba(0,0,0,.15);border-radius:8px;padding:10px 12px}
+.vel-stage{font-size:11px;font-weight:500;color:#666;margin-bottom:4px}
+.vel-rate{font-size:20px;font-weight:500}
+.vel-bar-bg{height:4px;background:rgba(0,0,0,.07);border-radius:2px;margin:5px 0 4px}
+.vel-bar{height:4px;border-radius:2px}
+.vel-meta{font-size:11px;color:#999}
+.table-wrap{overflow-x:auto;border-radius:12px;border:0.5px solid rgba(0,0,0,.15);background:#fff;margin-bottom:1.5rem}
+table{width:100%;border-collapse:collapse;font-size:13px}
+thead th{font-size:11px;font-weight:500;color:#666;text-align:left;padding:8px 10px;border-bottom:0.5px solid rgba(0,0,0,.12);white-space:nowrap;cursor:pointer;user-select:none;background:rgba(0,0,0,.04)}
+thead th:hover{color:#1a1a18}
+tbody tr{border-bottom:0.5px solid rgba(0,0,0,.08)}
+tbody tr:hover{background:rgba(0,0,0,.03)}
+td{padding:7px 10px;vertical-align:middle}
+td.deal a{color:#185FA5;text-decoration:none;font-weight:500;font-size:13px}
+td.deal a:hover{text-decoration:underline}
+td.amt{text-align:right;font-weight:500;white-space:nowrap}
+td.muted{color:#666;font-size:12px;white-space:nowrap}
+td.note{font-size:12px;color:#666;max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.badge{display:inline-block;font-size:11px;padding:2px 8px;border-radius:10px;white-space:nowrap}
+.b-commit{background:#E1F5EE;color:#0F6E56}.b-likely{background:#EEEDFE;color:#534AB7}
+.b-pipeline{background:#E6F1FB;color:#185FA5}.b-omit{background:#F1EFE8;color:#5F5E5A}
+.b-nova{background:#FAEEDA;color:#854F0B}.b-base{background:#FBEAF0;color:#993556}
+.prob-pill{display:inline-block;font-size:11px;font-weight:500;padding:2px 8px;border-radius:8px;white-space:nowrap}
+.vel-dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:4px}
+.sim-wrap{background:#fff;border:0.5px solid rgba(0,0,0,.15);border-radius:12px;padding:16px;margin-bottom:1.5rem}
+.sim-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+.sim-row{margin-bottom:12px}
+.sim-label{font-size:12px;color:#666;margin-bottom:4px;display:flex;justify-content:space-between}
+.sim-label span{font-weight:500;color:#1a1a18}
+.sim-result-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+.sim-result{background:rgba(0,0,0,.05);border-radius:8px;padding:10px 12px}
+.sim-result-label{font-size:11px;color:#666;margin-bottom:4px}
+.sim-result-value{font-size:18px;font-weight:500}
+.card-table{background:#fff;border:0.5px solid rgba(0,0,0,.15);border-radius:12px;overflow:hidden;margin-bottom:16px}
+.card-table table{font-size:13px}
+.card-table td{padding:9px 14px}
+.card-table tr+tr td{border-top:0.5px solid rgba(0,0,0,.08)}
+.card-table thead th{padding:8px 14px;font-size:11px;font-weight:500;color:#666;border-bottom:0.5px solid rgba(0,0,0,.12);background:rgba(0,0,0,.04)}
+.row-highlight{background:rgba(0,0,0,.04)}
+.loading-overlay{display:none;position:fixed;inset:0;background:rgba(255,255,255,.8);z-index:999;align-items:center;justify-content:center;flex-direction:column;gap:12px}
+.loading-overlay.active{display:flex}
+.loading-text{font-size:14px;color:#666}
+.error-bar{display:none;background:#FCEBEB;color:#A32D2D;border:0.5px solid #F09595;border-radius:8px;padding:10px 14px;margin-bottom:1rem;font-size:13px}
+.error-bar.active{display:block}
+@media(max-width:700px){.metrics-grid{grid-template-columns:repeat(2,1fr)}.vel-grid{grid-template-columns:repeat(2,1fr)}.sim-grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="spinner active" style="width:24px;height:24px;border:3px solid rgba(0,0,0,.1);border-top-color:#1a1a18;border-radius:50%;animation:spin .7s linear infinite"></div>
+  <div class="loading-text" id="loadingText">Carregando dados do HubSpot...</div>
+</div>
+
+<div class="app">
+  <div class="header">
+    <h1>Inside — Forecast</h1>
+    <div class="header-right">
+      <span class="badge-sync" id="syncBadge">Sem dados</span>
+      <button class="btn-refresh" id="btnRefresh" onclick="loadAllData()">
+        <div class="spinner" id="refreshSpinner"></div>
+        Atualizar dados
+      </button>
+    </div>
+  </div>
+
+  <div class="token-bar">
+    <label>HubSpot Token:</label>
+    <input type="password" id="hsToken" placeholder="pat-na1-..." autocomplete="off">
+    <button class="save-btn" onclick="saveToken()">Salvar token</button>
+    <span id="tokenStatus" style="font-size:12px;color:#666"></span>
+  </div>
+
+  <div class="error-bar" id="errorBar"></div>
+
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('forecast',this)">Forecast</button>
+    <button class="tab" onclick="switchTab('velocity',this)">Sales Velocity</button>
+    <button class="tab" onclick="switchTab('execucao',this)">Execução</button>
+    <button class="tab" onclick="switchTab('simulator',this)">Simulador</button>
+    <button class="tab" onclick="switchTab('cycle',this)">Ciclo histórico</button>
+  </div>
+
+  <!-- FORECAST -->
+  <div id="tab-forecast">
+    <div class="filters" id="repFilters"></div>
+    <div class="metrics-grid" id="metrics"><div class="metric"><div class="metric-label">Aguardando dados</div><div class="metric-value">—</div></div><div class="metric"><div class="metric-label">—</div><div class="metric-value">—</div></div><div class="metric"><div class="metric-label">—</div><div class="metric-value">—</div></div><div class="metric"><div class="metric-label">—</div><div class="metric-value">—</div></div></div>
+    <div class="chart-wrap">
+      <div class="chart-header">
+        <div class="section-title" style="margin:0">Forecast por período de fechamento</div>
+        <div style="display:flex;gap:6px">
+          <button class="filter-btn active" id="grpMonth" onclick="setGroup('month',this)">Mensal</button>
+          <button class="filter-btn" id="grpQuarter" onclick="setGroup('quarter',this)">Trimestral</button>
+        </div>
+      </div>
+      <div class="legend" style="margin-bottom:12px">
+        <span class="legend-item"><span class="legend-sq" style="background:#0F6E56"></span>Commit</span>
+        <span class="legend-item"><span class="legend-sq" style="background:#534AB7"></span>Most Likely</span>
+        <span class="legend-item"><span class="legend-sq" style="background:#378ADD"></span>Pipeline</span>
+      </div>
+      <div class="chart-canvas-wrap"><canvas id="forecastChart"></canvas></div>
+    </div>
+    <div class="section-title">Win rate por etapa — SQLs (Inv → Con)</div>
+    <div class="vel-grid" id="velGrid"></div>
+    <div class="legend" style="margin-bottom:1rem">
+      <span style="font-size:11px;font-weight:500;color:#666;margin-right:4px">Velocity (ciclo SQL):</span>
+      <span class="legend-item"><span class="vel-dot" style="background:#1D9E75"></span>No prazo</span>
+      <span class="legend-item"><span class="vel-dot" style="background:#EF9F27"></span>Atenção (1–2×)</span>
+      <span class="legend-item"><span class="vel-dot" style="background:#E24B4A"></span>Atrasado (&gt;2×)</span>
+    </div>
+    <div class="filters">
+      <span style="font-size:12px;color:#666">Categoria:</span>
+      <button class="filter-btn active" onclick="setCat('all',this)">Todas</button>
+      <button class="filter-btn" onclick="setCat('COMMIT',this)">Commit</button>
+      <button class="filter-btn" onclick="setCat('BEST_CASE',this)">Most Likely</button>
+      <button class="filter-btn" onclick="setCat('PIPELINE',this)">Pipeline</button>
+      <button class="filter-btn" onclick="setCat('OMIT',this)">Not Forecasted</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th onclick="sortBy('dealname')">Negócio</th>
+          <th onclick="sortBy('rep')">Rep</th>
+          <th onclick="sortBy('tipo')">Tipo</th>
+          <th onclick="sortBy('amount')" style="text-align:right">Valor</th>
+          <th onclick="sortBy('stage')">Etapa</th>
+          <th onclick="sortBy('close')">Fechamento</th>
+          <th onclick="sortBy('cat')">Categoria</th>
+          <th onclick="sortBy('prob')" style="text-align:right">Prob.</th>
+          <th onclick="sortBy('sqlDays')">Dias SQL</th>
+          <th>SDR</th>
+          <th>Produto</th>
+          <th>Notas (manager)</th>
+        </tr></thead>
+        <tbody id="tableBody"><tr><td colspan="12" style="padding:2rem;text-align:center;color:#999">Clique em "Atualizar dados" para carregar.</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- SALES VELOCITY -->
+  <div id="tab-velocity" style="display:none">
+    <div class="section-title" style="margin-bottom:10px">Forecast quantitativo — Sales Velocity Rate</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:1.5rem">
+      <div>
+        <div class="card-table" style="margin-bottom:0">
+          <table style="width:100%">
+            <tbody>
+              <tr class="row-highlight"><td colspan="2" style="font-weight:500;font-size:12px;color:#666;text-transform:uppercase;letter-spacing:.04em">Parâmetros históricos (editáveis)</td></tr>
+              <tr><td style="color:#666">Volume de SQLs (estoque atual)</td><td style="text-align:right"><input type="number" id="svr-sqls" value="37" min="0" step="1" oninput="calcSVR()" style="width:80px;text-align:right;font-weight:500;border:0.5px solid rgba(0,0,0,.25);border-radius:6px;padding:3px 8px;background:transparent;font-size:13px"></td></tr>
+              <tr><td style="color:#666">Ticket médio histórico (6 meses)</td><td style="text-align:right"><input type="number" id="svr-ticket" value="35000" min="0" step="1000" oninput="calcSVR()" style="width:100px;text-align:right;font-weight:500;border:0.5px solid rgba(0,0,0,.25);border-radius:6px;padding:3px 8px;background:transparent;font-size:13px"></td></tr>
+              <tr><td style="color:#666">Taxa de conversão histórica (6 meses)</td><td style="text-align:right"><input type="number" id="svr-conv" value="40" min="0" max="100" step="1" oninput="calcSVR()" style="width:70px;text-align:right;font-weight:500;border:0.5px solid rgba(0,0,0,.25);border-radius:6px;padding:3px 8px;background:transparent;font-size:13px"><span style="color:#666;margin-left:4px;font-size:12px">%</span></td></tr>
+              <tr><td style="color:#666">Ciclo de vendas histórico (6 meses)</td><td style="text-align:right"><input type="number" id="svr-cycle" value="30" min="1" step="1" oninput="calcSVR()" style="width:70px;text-align:right;font-weight:500;border:0.5px solid rgba(0,0,0,.25);border-radius:6px;padding:3px 8px;background:transparent;font-size:13px"><span style="color:#666;margin-left:4px;font-size:12px">dias</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div>
+        <div class="card-table" style="margin-bottom:0">
+          <table style="width:100%">
+            <tbody>
+              <tr class="row-highlight"><td colspan="2" style="font-weight:500;font-size:12px;color:#666;text-transform:uppercase;letter-spacing:.04em">Resultado</td></tr>
+              <tr><td style="color:#666">Dias para o final do mês</td><td style="text-align:right;font-weight:500" id="svr-dias-restantes">—</td></tr>
+              <tr><td style="color:#666">Sales Velocity Rate (receita/dia)</td><td style="text-align:right;font-weight:500" id="svr-daily">—</td></tr>
+              <tr><td style="color:#666">Forecast atual (dias restantes × SVR)</td><td style="text-align:right;font-weight:500" id="svr-forecast-atual">—</td></tr>
+              <tr class="row-highlight"><td style="font-weight:500">Resultado previsto (mês)</td><td style="text-align:right;font-weight:500;color:#0F6E56" id="svr-resultado">—</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <hr style="border:none;border-top:0.5px solid rgba(0,0,0,.1);margin-bottom:1.5rem">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:1.5rem">
+      <div>
+        <div class="section-title" style="margin-bottom:10px">Forecast qualitativo — <span id="velMesLabel">mês atual</span></div>
+        <div class="card-table">
+          <table style="width:100%">
+            <tbody>
+              <tr class="row-highlight"><td style="font-weight:500">Realizado + Commit</td><td style="text-align:right;font-weight:500;color:#0F6E56" id="fq-real-commit">—</td></tr>
+              <tr><td style="color:#666">Realizado (mês)</td><td style="text-align:right;font-weight:500" id="fq-realizado">—</td></tr>
+              <tr><td style="color:#666">Forecast Commit</td><td style="text-align:right;font-weight:500;color:#0F6E56" id="fq-commit">—</td></tr>
+              <tr><td style="color:#666">Forecast Most Likely</td><td style="text-align:right;font-weight:500;color:#534AB7" id="fq-likely">—</td></tr>
+              <tr><td style="color:#666">Forecast Pipeline</td><td style="text-align:right;font-weight:500;color:#185FA5" id="fq-pipeline">—</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="section-title" style="margin-bottom:10px">Realizado — deals won</div>
+        <div class="card-table"><table style="width:100%">
+          <thead><tr><th style="text-align:left">Negócio</th><th style="text-align:left">Rep</th><th style="text-align:right">Valor</th><th style="text-align:left">Produto</th></tr></thead>
+          <tbody id="wonTable"><tr><td colspan="4" style="padding:12px 14px;color:#999;font-size:12px">Aguardando dados...</td></tr></tbody>
+        </table></div>
+      </div>
+      <div>
+        <div class="section-title" style="margin-bottom:10px">Demand gen — <span id="velMesLabel2">mês atual</span></div>
+        <div class="card-table" style="margin-bottom:16px"><table style="width:100%">
+          <tbody>
+            <tr><td style="color:#666">SQLs gerados (mês)</td><td style="text-align:right;font-weight:500" id="dg-sqls">—</td></tr>
+            <tr><td style="color:#666">Estoque VQ</td><td style="text-align:right;font-weight:500" id="dg-vq">—</td></tr>
+            <tr><td style="color:#666">Estoque SQLs (pipe aberto)</td><td style="text-align:right;font-weight:500" id="dg-pipe">—</td></tr>
+          </tbody>
+        </table></div>
+        <div class="section-title" style="margin-bottom:10px">Reuniões de vendas — <span id="velMesLabel3">mês atual</span></div>
+        <div class="card-table"><table style="width:100%">
+          <thead><tr><th style="text-align:left">Rep</th><th style="text-align:right">Realizadas</th><th style="text-align:right">Agendadas</th><th style="text-align:right">Total</th></tr></thead>
+          <tbody id="meetingsTable"><tr><td colspan="4" style="padding:12px 14px;color:#999;font-size:12px">Aguardando dados...</td></tr></tbody>
+        </table>
+        <div style="padding:8px 14px;font-size:11px;color:#999;border-top:0.5px solid rgba(0,0,0,.08)">Realizadas = COMPLETED · Agendadas = SCHEDULED/RESCHEDULED · excluídas não comerciais</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- EXECUÇÃO -->
+  <div id="tab-execucao" style="display:none">
+    <div class="metrics-grid" id="execMetrics"></div>
+    <div class="filters" id="execRepFilters"></div>
+    <div class="section-title" style="margin-bottom:6px">Mapa de calor de execução</div>
+    <div style="font-size:11px;color:#666;margin-bottom:12px">Score = 40% dias na fase + 35% dias sem atividade + 25% dias sem reunião. Hover para detalhes.</div>
+    <div id="heatmapWrap"></div>
+    <div style="margin-top:1.5rem">
+      <div class="section-title" style="margin-bottom:10px">Ranking por risco</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th onclick="execSort('dealname')">Negócio</th>
+            <th onclick="execSort('rep')">Rep</th>
+            <th onclick="execSort('stage')">Etapa</th>
+            <th onclick="execSort('cat')">Categoria</th>
+            <th onclick="execSort('diasFase')" style="text-align:right">Dias na fase</th>
+            <th onclick="execSort('diasSemAtiv')" style="text-align:right">Dias s/ atividade</th>
+            <th onclick="execSort('diasSemReu')" style="text-align:right">Dias s/ reunião</th>
+            <th onclick="execSort('score')" style="text-align:right">Score</th>
+            <th>Stalled</th>
+          </tr></thead>
+          <tbody id="execTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- SIMULADOR -->
+  <div id="tab-simulator" style="display:none">
+    <div class="sim-wrap">
+      <div class="section-title" style="margin-bottom:16px">Ajuste os parâmetros e veja o impacto no forecast</div>
+      <div class="sim-grid">
+        <div>
+          <p style="font-size:12px;font-weight:500;color:#666;margin-bottom:14px">Win rate por etapa</p>
+          <div class="sim-row"><div class="sim-label">Investigação <span id="wrInv">31%</span></div><input type="range" min="0" max="100" step="1" value="31" id="sInv" oninput="simUpdate()"></div>
+          <div class="sim-row"><div class="sim-label">Solução <span id="wrSol">52%</span></div><input type="range" min="0" max="100" step="1" value="52" id="sSol" oninput="simUpdate()"></div>
+          <div class="sim-row"><div class="sim-label">Negociação <span id="wrNeg">68%</span></div><input type="range" min="0" max="100" step="1" value="68" id="sNeg" oninput="simUpdate()"></div>
+          <div class="sim-row"><div class="sim-label">Contratação <span id="wrCon">95%</span></div><input type="range" min="0" max="100" step="1" value="95" id="sCon" oninput="simUpdate()"></div>
+        </div>
+        <div>
+          <p style="font-size:12px;font-weight:500;color:#666;margin-bottom:14px">Resultado projetado</p>
+          <div class="sim-result-grid">
+            <div class="sim-result"><div class="sim-result-label">Forecast base</div><div class="sim-result-value" id="simBase">—</div></div>
+            <div class="sim-result"><div class="sim-result-label">Forecast simulado</div><div class="sim-result-value" id="simNew">—</div></div>
+            <div class="sim-result"><div class="sim-result-label">Δ variação</div><div class="sim-result-value" id="simDelta">—</div></div>
+            <div class="sim-result"><div class="sim-result-label">Deals ativos</div><div class="sim-result-value" id="simCount">—</div></div>
+          </div>
+          <div class="chart-canvas-wrap" style="height:180px"><canvas id="simChart"></canvas></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CICLO -->
+  <div id="tab-cycle" style="display:none">
+    <div class="metrics-grid" style="margin-bottom:1.5rem">
+      <div class="metric"><div class="metric-label">Ciclo SQL médio (239 won)</div><div class="metric-value">38 dias</div><div class="metric-sub">Inv. → close</div></div>
+      <div class="metric"><div class="metric-label">Mediana SQL</div><div class="metric-value">28 dias</div><div class="metric-sub">excluindo outliers &gt;150d</div></div>
+      <div class="metric"><div class="metric-label">Ciclo Base</div><div class="metric-value">24 dias</div><div class="metric-sub">win rate 62%</div></div>
+      <div class="metric"><div class="metric-label">Ciclo Nova</div><div class="metric-value">44 dias</div><div class="metric-sub">win rate 38%</div></div>
+    </div>
+    <div class="section-title">Ciclo SQL médio por etapa</div>
+    <div class="table-wrap" style="margin-bottom:1.5rem">
+      <table>
+        <thead><tr><th>Etapa</th><th style="text-align:right">Win rate</th><th style="text-align:right">Ciclo SQL médio</th><th style="text-align:right">Limiar "atrasado"</th></tr></thead>
+        <tbody>
+          <tr><td>Investigação</td><td class="amt">31%</td><td class="amt">44 dias</td><td class="amt">&gt;88 dias</td></tr>
+          <tr><td>Solução</td><td class="amt">52%</td><td class="amt">35 dias</td><td class="amt">&gt;70 dias</td></tr>
+          <tr><td>Negociação</td><td class="amt">68%</td><td class="amt">22 dias</td><td class="amt">&gt;44 dias</td></tr>
+          <tr><td>Contratação</td><td class="amt">95%</td><td class="amt">10 dias</td><td class="amt">&gt;20 dias</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="section-title">Fórmula de probabilidade ajustada</div>
+    <div style="background:#fff;border:0.5px solid rgba(0,0,0,.15);border-radius:12px;padding:16px;font-size:13px;line-height:1.8;color:#666">
+      <strong style="color:#1a1a18;font-weight:500">Referência:</strong> dias desde <code>data_de_entrada_na_etapa_inv</code> (ciclo SQL real).<br>
+      <div style="margin:8px 0 8px 16px;background:rgba(0,0,0,.05);padding:8px 12px;border-radius:6px;font-family:monospace;font-size:12px;color:#1a1a18">
+        diasSQL = hoje − data_de_entrada_na_etapa_inv<br>
+        decay = 1 − 0.15 × floor(diasSQL / cicloMédioEtapa)<br>
+        prob_ajustada = max(5%, win_rate × decay)
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const HS_URL="https://api.hubapi.com";
+const PORTAL_ID="4471711";
+const OWNERS={472681785:"Julia Lustosa",808578053:"Cadu Petkowicz",156834737:"Rafael Alexandre",83158266:"Raul Tavares",81724188:"Luiz H. Mattioli",86301090:"Sophia Kampf",1975127570:"Sthefany Silva",1218930975:"Luiza Alambert",77670725:"Caike Escaleira",64331943:"Otávio Gava"};
+const STAGE_META={"presentationscheduled":{label:"Investigação",wr:31,avgCycle:44,color:"#E24B4A"},"decisionmakerboughtin":{label:"Solução",wr:52,avgCycle:35,color:"#1D9E75"},"contractsent":{label:"Negociação",wr:68,avgCycle:22,color:"#378ADD"},"21a27e31-2381-4602-87ea-2aa1ecdfaa83":{label:"Contratação",wr:95,avgCycle:10,color:"#EF9F27"}};
+const STAGE_ORDER={"presentationscheduled":1,"decisionmakerboughtin":2,"contractsent":3,"21a27e31-2381-4602-87ea-2aa1ecdfaa83":4};
+const CAT_ORDER={COMMIT:1,BEST_CASE:2,PIPELINE:3,OMIT:4};
+const CAT_LABEL={COMMIT:"Commit",BEST_CASE:"Most Likely",PIPELINE:"Pipeline",OMIT:"Not Forecasted"};
+const CAT_CLASS={COMMIT:"b-commit",BEST_CASE:"b-likely",PIPELINE:"b-pipeline",OMIT:"b-omit"};
+const PRODUTO_LABEL={"Foundation Start":"PACE","Migração Hubspot Simples":"Migração (HubSpot)","Revops as a Service":"CRM Admin (HubSpot)","Personalizado":"Sales training (capacitação)","Fundamentos":"Fundamentos","Onboarding":"Onboarding"};
+const WON_STAGE="4120992";
+const VQ_STAGE="4437034";
+const PIPELINE_ID="default";
+const SALES_REPS=["472681785","808578053"];
+const NON_COMMERCIAL_KEYWORDS=["español","espanol","profe","kickoff","sucesso","gestão de conta","hubspot sync","inside 🔄","almoço","almoco","purple metrics","celcoin"];
+
+let allDeals=[],wonDeals=[],allMeetings={julia:[],cadu:[]},vqCount=0,sqlsThisMonth=0;
+let activeRep="all",activeCat="all",sortKey="close",sortDir=1,groupBy="month";
+let activeExecRep=null,execSortKey="score",execSortDir=-1;
+let chartInst=null,simChartInst=null;
+let TODAY=new Date();
+
+function getToken(){return localStorage.getItem("hs_token")||""}
+function saveToken(){const t=document.getElementById("hsToken").value.trim();if(t){localStorage.setItem("hs_token",t);document.getElementById("tokenStatus").textContent="Token salvo!";setTimeout(()=>document.getElementById("tokenStatus").textContent="",2000)}}
+
+function inferTipo(n){return/(renov|cross.?sell)/i.test(n||"")?"Base":"Nova"}
+function sqlDays(d){if(!d)return 0;return Math.max(0,Math.round((TODAY-new Date(d))/86400000))}
+function daysSince(d){if(!d)return 99;return Math.max(0,Math.round((TODAY-new Date(d))/86400000))}
+function adjProb(stage,days){const m=STAGE_META[stage];if(!m)return 0;const decay=Math.max(0,1-0.15*Math.floor(days/m.avgCycle));return Math.max(5,Math.round(m.wr*decay))}
+function velColor(stage,days){const m=STAGE_META[stage];if(!m)return"#888";const r=days/m.avgCycle;return r<=1?"#1D9E75":r<=2?"#EF9F27":"#E24B4A"}
+function velLabel(stage,days){const m=STAGE_META[stage];if(!m)return"";const r=days/m.avgCycle;return r<=1?"No prazo":r<=2?"Atenção":"Atrasado"}
+function fmtBRL(v){if(!v&&v!==0)return"—";return"R$ "+Math.round(v).toLocaleString("pt-BR")}
+function fmtK(v){return v>=1000?"R$ "+(v/1000).toFixed(0)+"k":"R$ "+Math.round(v)}
+function riskScore(f,a,r){return Math.round((Math.min(f,60)/60)*40+(Math.min(a,30)/30)*35+(Math.min(r,45)/45)*25)}
+function riskColor(s){if(s<=25)return{bg:"#E1F5EE",fg:"#0F6E56"};if(s<=50)return{bg:"#FAEEDA",fg:"#854F0B"};if(s<=75)return{bg:"#FBEAF0",fg:"#993556"};return{bg:"#FCEBEB",fg:"#A32D2D"}}
+function riskLabel(s){if(s<=25)return"Saudável";if(s<=50)return"Atenção";if(s<=75)return"Em risco";return"Crítico"}
+function periodKey(d,g){if(!d)return null;const dt=new Date(d);if(g==="quarter")return`${dt.getFullYear()} Q${Math.ceil((dt.getMonth()+1)/3)}`;return`${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,"0")}`}
+function periodLabel(k,g){if(g==="quarter")return k;const[y,m]=k.split("-");return["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"][+m-1]+"/"+y.slice(2)}
+function probStyle(p){if(p>=70)return"background:#E1F5EE;color:#0F6E56";if(p>=50)return"background:#E6F1FB;color:#185FA5";if(p>=30)return"background:#EEEDFE;color:#534AB7";if(p>=15)return"background:#FAEEDA;color:#854F0B";return"background:#FCEBEB;color:#A32D2D"}
+function isCommercial(title){const t=(title||"").toLowerCase();return!NON_COMMERCIAL_KEYWORDS.some(k=>t.includes(k))}
+function getMesPrefix(){const d=new Date();return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`}
+
+async function hsSearch(objectType,filters,properties,limit=200){
+  const token=getToken();
+  if(!token)throw new Error("Token não configurado");
+  const r=await fetch(`${HS_URL}/crm/v3/objects/${objectType}/search`,{
+    method:"POST",
+    headers:{"Authorization":`Bearer ${token}`,"Content-Type":"application/json"},
+    body:JSON.stringify({filterGroups:[{filters}],properties,limit})
+  });
+  if(!r.ok){const e=await r.json();throw new Error(e.message||`HTTP ${r.status}`)}
+  return r.json();
+}
+
+async function hsMeetings(ownerId){
+  const token=getToken();
+  if(!token)throw new Error("Token não configurado");
+  const today=new Date();
+  const firstDay=new Date(today.getFullYear(),today.getMonth(),1).getTime();
+  const lastDay=new Date(today.getFullYear(),today.getMonth()+1,0,23,59,59).getTime();
+  const r=await fetch(`${HS_URL}/crm/v3/objects/meetings/search`,{
+    method:"POST",
+    headers:{"Authorization":`Bearer ${token}`,"Content-Type":"application/json"},
+    body:JSON.stringify({filterGroups:[{filters:[
+      {propertyName:"hubspot_owner_id",operator:"EQ",value:String(ownerId)},
+      {propertyName:"hs_timestamp",operator:"GTE",value:String(firstDay)},
+      {propertyName:"hs_timestamp",operator:"LTE",value:String(lastDay)}
+    ]}],properties:["hs_meeting_title","hs_meeting_outcome","hs_timestamp","hubspot_owner_id"],limit:200})
+  });
+  if(!r.ok)throw new Error(`Meetings HTTP ${r.status}`);
+  return r.json();
+}
+
+async function loadAllData(){
+  const token=getToken();
+  if(!token){showError("Configure o token do HubSpot antes de atualizar.");document.getElementById("hsToken").focus();return}
+  setLoading(true,"Carregando deals do HubSpot...");
+  hideError();
+  try{
+    TODAY=new Date();
+    const mesPrefix=getMesPrefix();
+    const firstDayMs=new Date(TODAY.getFullYear(),TODAY.getMonth(),1).getTime();
+
+    setLoading(true,"Buscando pipeline ativo...");
+    const dealsRes=await hsSearch("deals",[
+      {propertyName:"dealstage",operator:"IN",values:["presentationscheduled","decisionmakerboughtin","contractsent","21a27e31-2381-4602-87ea-2aa1ecdfaa83"]},
+      {propertyName:"pipeline",operator:"EQ",value:PIPELINE_ID}
+    ],["dealname","amount","dealstage","closedate","createdate","hubspot_owner_id","hs_manual_forecast_category","forecast_notes__manager_","produto_do_projeto__negocio_","fonte__n_","sdr","data_de_entrada_na_etapa_inv","hs_v2_date_entered_current_stage","notes_last_updated","hs_is_stalled","data_da_ultima_reuniao_de_projeto"]);
+
+    setLoading(true,"Buscando deals won do mês...");
+    const wonRes=await hsSearch("deals",[
+      {propertyName:"dealstage",operator:"EQ",value:WON_STAGE},
+      {propertyName:"closedate",operator:"GTE",value:String(firstDayMs)},
+      {propertyName:"pipeline",operator:"EQ",value:PIPELINE_ID}
+    ],["dealname","amount","closedate","hubspot_owner_id","produto_do_projeto__negocio_"]);
+
+    setLoading(true,"Buscando estoque VQ...");
+    const vqRes=await hsSearch("deals",[
+      {propertyName:"dealstage",operator:"EQ",value:VQ_STAGE},
+      {propertyName:"pipeline",operator:"EQ",value:PIPELINE_ID}
+    ],["dealname"],1);
+
+    setLoading(true,"Buscando SQLs gerados no mês...");
+    const sqlsRes=await hsSearch("deals",[
+      {propertyName:"dealstage",operator:"IN",values:["presentationscheduled","decisionmakerboughtin","contractsent","21a27e31-2381-4602-87ea-2aa1ecdfaa83",WON_STAGE]},
+      {propertyName:"pipeline",operator:"EQ",value:PIPELINE_ID},
+      {propertyName:"data_de_entrada_na_etapa_inv",operator:"GTE",value:`${TODAY.getFullYear()}-${String(TODAY.getMonth()+1).padStart(2,"0")}-01`}
+    ],["dealname"],1);
+
+    setLoading(true,"Buscando reuniões de Julia...");
+    const juliaRes=await hsMeetings(472681785);
+
+    setLoading(true,"Buscando reuniões de Cadu...");
+    const caduRes=await hsMeetings(808578053);
+
+    // Processar deals
+    allDeals=dealsRes.results.map(d=>{
+      const p=d.properties;
+      const stage=p.dealstage||"";
+      const inv_date=p.data_de_entrada_na_etapa_inv||p.createdate?.split("T")[0]||"";
+      const days=sqlDays(inv_date);
+      const prob=adjProb(stage,days);
+      const diasFase=daysSince(p.hs_v2_date_entered_current_stage);
+      const diasSemAtiv=daysSince(p.notes_last_updated);
+      const lastMeeting=p.data_da_ultima_reuniao_de_projeto||null;
+      const diasSemReu=lastMeeting?daysSince(lastMeeting):null;
+      const score=riskScore(diasFase,diasSemAtiv,diasSemReu!=null?diasSemReu:45);
+      return{
+        id:parseInt(d.id),
+        dealname:(p.dealname||"").trim(),
+        rep:parseInt(p.hubspot_owner_id)||0,
+        sdr:parseInt(p.sdr)||0,
+        amount:parseFloat(p.amount)||0,
+        stage,
+        close:p.closedate?p.closedate.split("T")[0]:"",
+        cat:p.hs_manual_forecast_category||"OMIT",
+        inv_date,
+        tipo:inferTipo(p.dealname),
+        produto:p.produto_do_projeto__negocio_||"",
+        fonte:p.fonte__n_||"",
+        notes:p.forecast_notes__manager_||"",
+        stalled:p.hs_is_stalled==="true",
+        stageDate:p.hs_v2_date_entered_current_stage?.split("T")[0]||"",
+        lastActivity:p.notes_last_updated?.split("T")[0]||"",
+        lastMeeting,
+        sqlDays:days,prob,wv:((parseFloat(p.amount)||0))*(prob/100),
+        vc:velColor(stage,days),vl:velLabel(stage,days),
+        diasFase,diasSemAtiv,diasSemReu,score
+      };
+    });
+
+    wonDeals=wonRes.results.map(d=>({
+      id:parseInt(d.id),
+      dealname:(d.properties.dealname||"").trim(),
+      rep:parseInt(d.properties.hubspot_owner_id)||0,
+      amount:parseFloat(d.properties.amount)||0,
+      close:d.properties.closedate?.split("T")[0]||"",
+      produto:d.properties.produto_do_projeto__negocio_||""
+    }));
+
+    vqCount=vqRes.total||0;
+    sqlsThisMonth=sqlsRes.total||0;
+
+    const filterMeetings=res=>res.results.filter(m=>isCommercial(m.properties.hs_meeting_title));
+    allMeetings.julia=filterMeetings(juliaRes);
+    allMeetings.cadu=filterMeetings(caduRes);
+
+    const now=new Date();
+    document.getElementById("syncBadge").textContent=`${allDeals.length} deals · ${now.toLocaleDateString("pt-BR")} ${now.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"})}`;
+
+    render();
+    setLoading(false);
+  }catch(e){
+    setLoading(false);
+    showError("Erro ao carregar: "+e.message);
+  }
+}
+
+function setLoading(active,text=""){
+  document.getElementById("loadingOverlay").classList.toggle("active",active);
+  document.getElementById("btnRefresh").disabled=active;
+  document.getElementById("refreshSpinner").classList.toggle("active",active);
+  if(text)document.getElementById("loadingText").textContent=text;
+}
+function showError(msg){const el=document.getElementById("errorBar");el.textContent=msg;el.classList.add("active")}
+function hideError(){document.getElementById("errorBar").classList.remove("active")}
+
+function render(){
+  buildRepFilters();buildVelCards();
+  renderMetrics();renderChart();renderTable();
+  if(document.getElementById("tab-velocity").style.display!=="none")renderVelocity();
+  if(document.getElementById("tab-execucao").style.display!=="none")initExecTab();
+  if(document.getElementById("tab-simulator").style.display!=="none")simUpdate();
+}
+
+function buildRepFilters(){
+  const reps=[...new Map(allDeals.map(d=>[d.rep,OWNERS[d.rep]||d.rep])).entries()].sort((a,b)=>a[1].localeCompare(b[1]));
+  document.getElementById("repFilters").innerHTML=
+    `<span style="font-size:12px;color:#666">Rep:</span>`+
+    `<button class="filter-btn ${activeRep==="all"?"active":""}" onclick="setRep('all',this)">Todos</button>`+
+    reps.map(([id,n])=>`<button class="filter-btn ${activeRep==id?"active":""}" onclick="setRep(${id},this)">${n}</button>`).join("");
+}
+
+function buildVelCards(){
+  document.getElementById("velGrid").innerHTML=Object.entries(STAGE_META).map(([,m])=>`
+    <div class="vel-card"><div class="vel-stage">${m.label}</div><div class="vel-rate" style="color:${m.color}">${m.wr}%</div>
+    <div class="vel-bar-bg"><div class="vel-bar" style="width:${m.wr}%;background:${m.color}"></div></div>
+    <div class="vel-meta">ciclo SQL médio: ${m.avgCycle} dias</div></div>`).join("");
+}
+
+function filtered(){
+  return allDeals.filter(d=>{
+    if(activeRep!=="all"&&d.rep!=activeRep)return false;
+    if(activeCat!=="all"&&d.cat!==activeCat)return false;
+    return true;
+  }).sort((a,b)=>{
+    let av,bv;
+    if(sortKey==="stage"){av=STAGE_ORDER[a.stage]||9;bv=STAGE_ORDER[b.stage]||9}
+    else if(sortKey==="cat"){av=CAT_ORDER[a.cat]||9;bv=CAT_ORDER[b.cat]||9}
+    else if(sortKey==="rep"){av=OWNERS[a.rep]||"";bv=OWNERS[b.rep]||""}
+    else{av=a[sortKey]||"";bv=b[sortKey]||""}
+    if(av<bv)return-sortDir;if(av>bv)return sortDir;return 0;
+  });
+}
+
+function renderMetrics(){
+  const d=filtered();
+  const pipe=d.reduce((s,x)=>s+x.amount,0);
+  const commit=d.filter(x=>x.cat==="COMMIT").reduce((s,x)=>s+x.amount,0);
+  const likely=d.filter(x=>x.cat==="BEST_CASE").reduce((s,x)=>s+x.amount,0);
+  const weighted=d.reduce((s,x)=>s+x.wv,0);
+  document.getElementById("metrics").innerHTML=`
+    <div class="metric"><div class="metric-label">Pipeline total</div><div class="metric-value">${fmtBRL(pipe)}</div><div class="metric-sub">${d.length} deals · SQL+</div></div>
+    <div class="metric"><div class="metric-label">Commit</div><div class="metric-value" style="color:#0F6E56">${fmtBRL(commit)}</div><div class="metric-sub">${d.filter(x=>x.cat==="COMMIT").length} deals</div></div>
+    <div class="metric"><div class="metric-label">Most Likely</div><div class="metric-value" style="color:#534AB7">${fmtBRL(likely)}</div><div class="metric-sub">${d.filter(x=>x.cat==="BEST_CASE").length} deals</div></div>
+    <div class="metric"><div class="metric-label">Forecast ponderado</div><div class="metric-value" style="color:#185FA5">${fmtBRL(weighted)}</div><div class="metric-sub">win rate × decay SQL</div></div>`;
+}
+
+function renderChart(){
+  if(!allDeals.length)return;
+  const periods={};
+  allDeals.forEach(d=>{
+    const k=periodKey(d.close,groupBy);if(!k)return;
+    if(!periods[k])periods[k]={COMMIT:0,BEST_CASE:0,PIPELINE:0};
+    if(d.cat==="COMMIT")periods[k].COMMIT+=d.amount;
+    else if(d.cat==="BEST_CASE")periods[k].BEST_CASE+=d.amount;
+    else if(d.cat==="PIPELINE")periods[k].PIPELINE+=d.amount;
+  });
+  const keys=Object.keys(periods).sort();
+  if(chartInst)chartInst.destroy();
+  chartInst=new Chart(document.getElementById("forecastChart"),{type:"bar",
+    data:{labels:keys.map(k=>periodLabel(k,groupBy)),datasets:[
+      {label:"Commit",data:keys.map(k=>periods[k].COMMIT),backgroundColor:"#0F6E56",stack:"s"},
+      {label:"Most Likely",data:keys.map(k=>periods[k].BEST_CASE),backgroundColor:"#534AB7",stack:"s"},
+      {label:"Pipeline",data:keys.map(k=>periods[k].PIPELINE),backgroundColor:"#378ADD",stack:"s"}
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label}: ${fmtBRL(ctx.raw)}`}}},
+      scales:{x:{grid:{display:false},ticks:{color:"#888",font:{size:11},autoSkip:false}},y:{grid:{color:"rgba(0,0,0,0.06)"},ticks:{color:"#888",font:{size:11},callback:v=>fmtK(v)}}}}
+  });
+}
+
+function renderTable(){
+  const d=filtered();
+  if(!d.length){document.getElementById("tableBody").innerHTML=`<tr><td colspan="12" style="padding:2rem;text-align:center;color:#999">Nenhum deal encontrado.</td></tr>`;return}
+  document.getElementById("tableBody").innerHTML=d.map(x=>`<tr>
+    <td class="deal"><a href="https://app.hubspot.com/contacts/${PORTAL_ID}/record/0-3/${x.id}" target="_blank">${x.dealname}</a></td>
+    <td class="muted">${OWNERS[x.rep]||x.rep}</td>
+    <td><span class="badge ${x.tipo==="Base"?"b-base":"b-nova"}">${x.tipo}</span></td>
+    <td class="amt">${fmtBRL(x.amount)}</td>
+    <td class="muted"><span class="vel-dot" style="background:${STAGE_META[x.stage]?.color||"#888"}"></span>${STAGE_META[x.stage]?.label||x.stage}</td>
+    <td class="muted">${x.close||"—"}</td>
+    <td><span class="badge ${CAT_CLASS[x.cat]||"b-omit"}">${CAT_LABEL[x.cat]||x.cat}</span></td>
+    <td style="text-align:right"><span class="prob-pill" style="${probStyle(x.prob)}">${x.prob}%</span></td>
+    <td class="muted"><span class="vel-dot" style="background:${x.vc}"></span>${x.sqlDays}d <span style="color:#999;font-size:11px">${x.vl}</span></td>
+    <td class="muted">${OWNERS[x.sdr]||"—"}</td>
+    <td class="muted" style="font-size:11px">${PRODUTO_LABEL[x.produto]||x.produto||"—"}</td>
+    <td class="note" title="${x.notes}">${x.notes||"—"}</td>
+  </tr>`).join("");
+}
+
+function renderVelocity(){
+  const mesPrefix=getMesPrefix();
+  const mesLabel=new Date().toLocaleDateString("pt-BR",{month:"long",year:"numeric"});
+  document.querySelectorAll(".velMesLabel,#velMesLabel,#velMesLabel2,#velMesLabel3").forEach(el=>el.textContent=mesLabel);
+
+  const commit=allDeals.filter(d=>d.cat==="COMMIT"&&d.close&&d.close.startsWith(mesPrefix)).reduce((s,d)=>s+d.amount,0);
+  const likely=allDeals.filter(d=>d.cat==="BEST_CASE"&&d.close&&d.close.startsWith(mesPrefix)).reduce((s,d)=>s+d.amount,0);
+  const pipeline=allDeals.filter(d=>d.cat==="PIPELINE"&&d.close&&d.close.startsWith(mesPrefix)).reduce((s,d)=>s+d.amount,0);
+  const realizado=wonDeals.reduce((s,d)=>s+d.amount,0);
+
+  document.getElementById("fq-realizado").textContent=fmtBRL(realizado);
+  document.getElementById("fq-real-commit").textContent=fmtBRL(realizado+commit);
+  document.getElementById("fq-commit").textContent=fmtBRL(commit);
+  document.getElementById("fq-likely").textContent=fmtBRL(likely);
+  document.getElementById("fq-pipeline").textContent=fmtBRL(pipeline);
+
+  // Won table
+  if(wonDeals.length){
+    document.getElementById("wonTable").innerHTML=wonDeals.map(d=>`<tr>
+      <td><a href="https://app.hubspot.com/contacts/${PORTAL_ID}/record/0-3/${d.id}" target="_blank" style="color:#185FA5;text-decoration:none;font-weight:500">${d.dealname}</a></td>
+      <td style="color:#666;font-size:12px">${OWNERS[d.rep]||d.rep}</td>
+      <td style="text-align:right;font-weight:500">${fmtBRL(d.amount)}</td>
+      <td style="font-size:12px;color:#666">${PRODUTO_LABEL[d.produto]||d.produto||"—"}</td>
+    </tr>`).join("");
+  }else{
+    document.getElementById("wonTable").innerHTML=`<tr><td colspan="4" style="padding:12px 14px;color:#999;font-size:12px">Nenhum deal won no mês.</td></tr>`;
+  }
+
+  // Demand gen
+  document.getElementById("dg-sqls").textContent=sqlsThisMonth;
+  document.getElementById("dg-vq").textContent=vqCount;
+  document.getElementById("dg-pipe").textContent=allDeals.length;
+
+  // Meetings
+  const countMeetings=arr=>({
+    done:arr.filter(m=>m.properties.hs_meeting_outcome==="COMPLETED").length,
+    sched:arr.filter(m=>["SCHEDULED","RESCHEDULED"].includes(m.properties.hs_meeting_outcome)).length
+  });
+  const jm=countMeetings(allMeetings.julia);
+  const cm=countMeetings(allMeetings.cadu);
+  document.getElementById("meetingsTable").innerHTML=`
+    <tr><td style="font-weight:500">Julia Lustosa</td><td style="text-align:right">${jm.done}</td><td style="text-align:right;color:#666">${jm.sched}</td><td style="text-align:right;font-weight:500">${jm.done+jm.sched}</td></tr>
+    <tr><td style="font-weight:500">Cadu Petkowicz</td><td style="text-align:right">${cm.done}</td><td style="text-align:right;color:#666">${cm.sched}</td><td style="text-align:right;font-weight:500">${cm.done+cm.sched}</td></tr>
+    <tr class="row-highlight"><td style="font-weight:500">Total time</td><td style="text-align:right;font-weight:500">${jm.done+cm.done}</td><td style="text-align:right;font-weight:500;color:#666">${jm.sched+cm.sched}</td><td style="text-align:right;font-weight:500">${jm.done+jm.sched+cm.done+cm.sched}</td></tr>`;
+
+  calcSVR(wonDeals.reduce((s,d)=>s+d.amount,0),commit);
+}
+
+function calcSVR(realizado,commit){
+  const sqls=parseFloat(document.getElementById("svr-sqls").value)||0;
+  const ticket=parseFloat(document.getElementById("svr-ticket").value)||0;
+  const conv=(parseFloat(document.getElementById("svr-conv").value)||0)/100;
+  const cycle=parseFloat(document.getElementById("svr-cycle").value)||1;
+  const hoje=new Date();
+  const fimMes=new Date(hoje.getFullYear(),hoje.getMonth()+1,0);
+  const diasRestantes=Math.round((fimMes-hoje)/86400000);
+  const svr=(sqls*conv*ticket)/cycle;
+  const forecastAtual=svr*diasRestantes;
+  const R=realizado!=null?realizado:wonDeals.reduce((s,d)=>s+d.amount,0);
+  const C=commit!=null?commit:allDeals.filter(d=>d.cat==="COMMIT"&&d.close&&d.close.startsWith(getMesPrefix())).reduce((s,d)=>s+d.amount,0);
+  const resultado=R+C+forecastAtual;
+  const fmt=v=>"R$ "+Math.round(v).toLocaleString("pt-BR");
+  document.getElementById("svr-dias-restantes").textContent=diasRestantes+" dias";
+  document.getElementById("svr-daily").textContent=fmt(svr);
+  document.getElementById("svr-forecast-atual").textContent=fmt(forecastAtual);
+  document.getElementById("svr-resultado").textContent=fmt(resultado);
+}
+
+function initExecTab(){
+  const criticos=allDeals.filter(d=>d.score>75).length;
+  const emRisco=allDeals.filter(d=>d.score>50&&d.score<=75).length;
+  const stalled=allDeals.filter(d=>d.stalled).length;
+  const semReu=allDeals.filter(d=>d.diasSemReu===null).length;
+  document.getElementById("execMetrics").innerHTML=`
+    <div class="metric"><div class="metric-label">Críticos (&gt;75)</div><div class="metric-value" style="color:#A32D2D">${criticos}</div><div class="metric-sub">ação imediata</div></div>
+    <div class="metric"><div class="metric-label">Em risco (51–75)</div><div class="metric-value" style="color:#993556">${emRisco}</div><div class="metric-sub">monitorar</div></div>
+    <div class="metric"><div class="metric-label">Stalled</div><div class="metric-value" style="color:#854F0B">${stalled}</div><div class="metric-sub">flag HubSpot ativa</div></div>
+    <div class="metric"><div class="metric-label">Sem reunião</div><div class="metric-value">${semReu}</div><div class="metric-sub">nenhuma data registrada</div></div>`;
+  buildExecRepFilters();
+  renderHeatmap(activeExecRep);
+  renderExecTable();
+}
+
+function renderHeatmap(repFilter){
+  const data=allDeals.filter(d=>!repFilter||d.rep==repFilter);
+  const reps=[...new Set(data.map(d=>d.rep))].sort((a,b)=>(OWNERS[a]||"").localeCompare(OWNERS[b]||""));
+  const stages=["presentationscheduled","decisionmakerboughtin","contractsent","21a27e31-2381-4602-87ea-2aa1ecdfaa83"];
+  let html=`<div style="overflow-x:auto"><table style="border-collapse:separate;border-spacing:4px;width:100%"><thead><tr>
+    <th style="font-size:11px;font-weight:500;color:#666;padding:4px 8px;text-align:left;min-width:100px"></th>
+    ${stages.map(s=>`<th style="font-size:11px;font-weight:500;color:#666;padding:4px 8px;text-align:left">${STAGE_META[s].label}</th>`).join("")}
+    </tr></thead><tbody>`;
+  reps.forEach(rep=>{
+    html+=`<tr><td style="font-size:12px;font-weight:500;color:#666;padding:4px 8px;white-space:nowrap">${OWNERS[rep]||rep}</td>`;
+    stages.forEach(stage=>{
+      const deals=data.filter(d=>d.rep==rep&&d.stage===stage);
+      if(!deals.length){html+=`<td style="padding:4px"></td>`;return}
+      html+=`<td style="padding:4px;vertical-align:top"><div style="display:flex;flex-direction:column;gap:3px">`;
+      deals.forEach(d=>{
+        const c=riskColor(d.score);
+        const reuInfo=d.diasSemReu!=null?`${d.diasSemReu}d atrás`:"sem registro";
+        html+=`<a href="https://app.hubspot.com/contacts/${PORTAL_ID}/record/0-3/${d.id}" target="_blank"
+          title="${d.dealname} · Score ${d.score} · ${riskLabel(d.score)}&#10;Fase: ${d.diasFase}d · Atividade: ${d.diasSemAtiv}d · Reunião: ${reuInfo}"
+          style="display:block;background:${c.bg};color:${c.fg};border-radius:6px;padding:5px 8px;font-size:11px;font-weight:500;text-decoration:none;line-height:1.3;min-width:110px;max-width:170px">
+          <div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${d.dealname}</div>
+          <div style="font-size:10px;opacity:.8;margin-top:1px">${riskLabel(d.score)} · ${d.score}/100</div></a>`;
+      });
+      html+=`</div></td>`;
+    });
+    html+=`</tr>`;
+  });
+  html+=`</tbody></table></div>`;
+  document.getElementById("heatmapWrap").innerHTML=html;
+}
+
+function renderExecTable(){
+  const data=[...allDeals].sort((a,b)=>{
+    let av=a[execSortKey],bv=b[execSortKey];
+    if(execSortKey==="stage"){av=STAGE_ORDER[a.stage]||9;bv=STAGE_ORDER[b.stage]||9}
+    if(execSortKey==="rep"){av=OWNERS[a.rep]||"";bv=OWNERS[b.rep]||""}
+    if(execSortKey==="cat"){av=CAT_ORDER[a.cat]||9;bv=CAT_ORDER[b.cat]||9}
+    if(av==null)av=999;if(bv==null)bv=999;
+    if(av<bv)return-execSortDir;if(av>bv)return execSortDir;return 0;
+  });
+  document.getElementById("execTableBody").innerHTML=data.map(d=>{
+    const c=riskColor(d.score);
+    return`<tr>
+      <td class="deal"><a href="https://app.hubspot.com/contacts/${PORTAL_ID}/record/0-3/${d.id}" target="_blank">${d.dealname}</a></td>
+      <td class="muted">${OWNERS[d.rep]||d.rep}</td>
+      <td class="muted"><span class="vel-dot" style="background:${STAGE_META[d.stage]?.color||"#888"}"></span>${STAGE_META[d.stage]?.label||d.stage}</td>
+      <td><span class="badge ${CAT_CLASS[d.cat]||"b-omit"}">${CAT_LABEL[d.cat]||d.cat}</span></td>
+      <td class="muted" style="text-align:right">${d.diasFase}d</td>
+      <td class="muted" style="text-align:right">${d.diasSemAtiv}d</td>
+      <td class="muted" style="text-align:right">${d.diasSemReu!=null?d.diasSemReu+"d":"—"}</td>
+      <td style="text-align:right"><span class="prob-pill" style="background:${c.bg};color:${c.fg}">${d.score}/100</span></td>
+      <td style="text-align:center">${d.stalled?`<span style="color:#854F0B">⚑</span>`:`<span style="color:#999">·</span>`}</td>
+    </tr>`;
+  }).join("");
+}
+
+function buildExecRepFilters(){
+  const reps=[...new Map(allDeals.map(d=>[d.rep,OWNERS[d.rep]||d.rep])).entries()].sort((a,b)=>a[1].localeCompare(b[1]));
+  document.getElementById("execRepFilters").innerHTML=
+    `<span style="font-size:12px;color:#666">Rep:</span>`+
+    `<button class="filter-btn ${!activeExecRep?"active":""}" onclick="setExecRep('all',this)">Todos</button>`+
+    reps.map(([id,n])=>`<button class="filter-btn ${activeExecRep==id?"active":""}" onclick="setExecRep(${id},this)">${n}</button>`).join("");
+}
+
+function simUpdate(){
+  const wr={"presentationscheduled":+document.getElementById("sInv").value,"decisionmakerboughtin":+document.getElementById("sSol").value,"contractsent":+document.getElementById("sNeg").value,"21a27e31-2381-4602-87ea-2aa1ecdfaa83":+document.getElementById("sCon").value};
+  document.getElementById("wrInv").textContent=wr.presentationscheduled+"%";
+  document.getElementById("wrSol").textContent=wr.decisionmakerboughtin+"%";
+  document.getElementById("wrNeg").textContent=wr.contractsent+"%";
+  document.getElementById("wrCon").textContent=wr["21a27e31-2381-4602-87ea-2aa1ecdfaa83"]+"%";
+  const active=allDeals.filter(d=>STAGE_META[d.stage]&&d.cat!=="OMIT");
+  let base=0,sim=0;
+  active.forEach(d=>{
+    base+=d.wv;
+    const m=STAGE_META[d.stage];
+    const decay=Math.max(0,1-0.15*Math.floor(d.sqlDays/m.avgCycle));
+    sim+=d.amount*(Math.max(5,Math.round((wr[d.stage]||m.wr)*decay))/100);
+  });
+  document.getElementById("simBase").textContent=fmtBRL(base);
+  document.getElementById("simNew").textContent=fmtBRL(sim);
+  const delta=sim-base;
+  const el=document.getElementById("simDelta");
+  el.textContent=(delta>=0?"+":"")+fmtBRL(Math.abs(delta));
+  el.style.color=delta>=0?"#0F6E56":"#E24B4A";
+  document.getElementById("simCount").textContent=active.length;
+  const stages=["presentationscheduled","decisionmakerboughtin","contractsent","21a27e31-2381-4602-87ea-2aa1ecdfaa83"];
+  if(simChartInst)simChartInst.destroy();
+  simChartInst=new Chart(document.getElementById("simChart"),{type:"bar",
+    data:{labels:["Investigação","Solução","Negociação","Contratação"],datasets:[
+      {label:"Atual",data:stages.map(s=>STAGE_META[s].wr),backgroundColor:"#B4B2A9"},
+      {label:"Simulado",data:stages.map(s=>wr[s]),backgroundColor:"#378ADD"}
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
+      scales:{x:{grid:{display:false},ticks:{color:"#888",font:{size:10}}},y:{max:100,ticks:{color:"#888",font:{size:10},callback:v=>v+"%"}}}}
+  });
+}
+
+function setRep(rep,el){activeRep=rep==="all"?"all":+rep;buildRepFilters();renderMetrics();renderChart();renderTable()}
+function setCat(cat,el){activeCat=cat;document.querySelectorAll(".filters .filter-btn").forEach(b=>b.classList.remove("active"));el.classList.add("active");renderTable()}
+function setGroup(g,el){groupBy=g;document.getElementById("grpMonth").classList.toggle("active",g==="month");document.getElementById("grpQuarter").classList.toggle("active",g==="quarter");renderChart()}
+function sortBy(k){if(sortKey===k)sortDir*=-1;else{sortKey=k;sortDir=1}renderTable()}
+function setExecRep(rep,el){activeExecRep=rep==="all"?null:+rep;document.querySelectorAll("#execRepFilters .filter-btn").forEach(b=>b.classList.remove("active"));el.classList.add("active");renderHeatmap(activeExecRep)}
+function execSort(k){if(execSortKey===k)execSortDir*=-1;else{execSortKey=k;execSortDir=-1}renderExecTable()}
+function switchTab(name,el){
+  ["forecast","velocity","execucao","simulator","cycle"].forEach(t=>{const e=document.getElementById("tab-"+t);if(e)e.style.display=t===name?"block":"none"});
+  document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active"));
+  el.classList.add("active");
+  if(name==="velocity"&&allDeals.length)renderVelocity();
+  if(name==="execucao"&&allDeals.length)initExecTab();
+  if(name==="simulator")simUpdate();
+}
+
+// Init — carrega token salvo se existir
+window.addEventListener("load",()=>{
+  const saved=getToken();
+  if(saved){document.getElementById("hsToken").value=saved;document.getElementById("tokenStatus").textContent="Token carregado."}
+  buildVelCards();
+});
+</script>
+</body>
+</html>
